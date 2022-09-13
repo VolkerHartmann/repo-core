@@ -94,7 +94,7 @@ dependencies {
     implementation "org.javers:javers-spring-boot-starter-sql:${javersVersion}"
     // Database
     implementation "com.h2database:h2:1.4.200"
-    implementation "org.postgresql:postgresql:42.3.1"
+    implementation "org.postgresql:postgresql:42.5.0"
     // XML
     implementation "com.fasterxml.jackson.jaxrs:jackson-jaxrs-json-provider:2.13.0"
     implementation "com.fasterxml.jackson.module:jackson-module-afterburner:2.13.0"
