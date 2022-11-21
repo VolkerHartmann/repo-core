@@ -67,7 +67,7 @@ if (project.hasProperty('release')) {
 
 dependencies {
     // Spring
-    implementation 'org.springframework:spring-messaging:5.3.23'
+    implementation 'org.springframework:spring-messaging:6.0.0'
     // Spring Boot
     implementation "org.springframework.boot:spring-boot-starter-data-rest"
     implementation "org.springframework.boot:spring-boot-starter-amqp"
