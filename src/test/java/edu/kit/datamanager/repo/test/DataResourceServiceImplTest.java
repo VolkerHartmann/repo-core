@@ -98,6 +98,11 @@ public class DataResourceServiceImplTest {
       }
 
       @Override
+      public void restore(DataResource c) {
+        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+      }
+
+      @Override
       public Optional<String> getAuditInformationAsJson(String string, Pageable pgbl) {
         throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
       }
