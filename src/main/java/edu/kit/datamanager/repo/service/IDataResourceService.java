@@ -263,4 +263,14 @@ public interface IDataResourceService extends IGenericService<DataResource>, ISe
    * @return A page of data resources matching the example or an empty page.
    */
   Page<DataResource> findByExample(DataResource example, Instant lastUpdateFrom, Instant lastUpdateUntil, List<String> callerIdentities, boolean callerIsAdministrator, Pageable pgbl);
+
+  /**
+   * Restore provided data resource. To 'restore' a data resource just make the
+   * data resource visible again. 
+   * You need to have ADMINISTRATION rights for resource to restore a REVOKED data resource. 
+   * You need to be an ADMINISTRATOR to restore a data resource which is already 'GONE' 
+   *
+   * @param entity The dataresource to restore.
+   */
+  void restore(final DataResource entity);
 }

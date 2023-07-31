@@ -318,12 +318,76 @@ public class DataResourceUtils {
         try {
             DataResource resource = getResourceByIdentifierOrRedirect(applicationProperties, identifier, null, supplier);
             LOGGER.trace("Resource found. Checking for permission {} or role {}.", PERMISSION.ADMINISTRATE, RepoUserRole.ADMINISTRATOR);
-            if (DataResourceUtils.hasPermission(resource, PERMISSION.ADMINISTRATE) || AuthenticationHelper.hasAuthority(RepoUserRole.ADMINISTRATOR.getValue())) {
+            if (DataResourceUtils.hasPermission(resource, PERMISSION.ADMINISTRATE) || 
+                    AuthenticationHelper.hasAuthority(RepoUserRole.ADMINISTRATOR.getValue())) {
                 LOGGER.trace("Permissions found. Continuing with DELETE operation.");
                 ControllerUtils.checkEtag(eTag, resource);
-                if (!DataResource.State.REVOKED.equals(resource.getState()) || AuthenticationHelper.hasAuthority(RepoUserRole.ADMINISTRATOR.getValue()) || AuthenticationHelper.isPrincipal("SELF")) {
+                if (!DataResource.State.REVOKED.equals(resource.getState()) ||
+                        AuthenticationHelper.hasAuthority(RepoUserRole.ADMINISTRATOR.getValue()) || 
+                        AuthenticationHelper.isPrincipal("SELF")) {
                     //call delete if resource not revoked (to revoke it) or if it is revoked and role is administrator or caller is repository itself (to set state to GONE)
                     applicationProperties.getDataResourceService().delete(resource);
+                }
+            } else {
+                String message = "Insufficient permissions. ADMINISTRATE permission or ROLE_ADMINISTRATOR required.";
+                LOGGER.info(message);
+                throw new UpdateForbiddenException(message);
+            }
+        } catch (ResourceNotFoundException ex) {
+            //ignored
+            LOGGER.info("Resource with identifier {} not found. Returning with HTTP NO_CONTENT.", identifier);
+        }
+
+    }
+
+    /**
+     * Restore a previously deleted resource.
+     *
+     * @param applicationProperties
+     * @param identifier
+     * @param request
+     * @param supplier
+     */
+    public static void restoreResource(RepoBaseConfiguration applicationProperties,
+            String identifier,
+            final WebRequest request,
+            Function<String, String> supplier) {
+        String etagFromHeader = ControllerUtils.getEtagFromHeader(request);
+        restoreResource(applicationProperties, identifier, etagFromHeader, supplier);
+    }
+
+    /**
+     * Restore a previously deleted resource.
+     *
+     * @param applicationProperties
+     * @param identifier
+     * @param eTag
+     * @param supplier
+     */
+    public static void restoreResource(RepoBaseConfiguration applicationProperties,
+            String identifier,
+            final String eTag,
+            Function<String, String> supplier) {
+        if (applicationProperties.isReadOnly()) {
+            String message = "Repository is in read-only mode. Restore request denied.";
+            LOGGER.info(message);
+            throw new ServiceUnavailableException(message);
+        }
+
+        ControllerUtils.checkAnonymousAccess();
+
+        try {
+            DataResource resource = getResourceByIdentifierOrRedirect(applicationProperties, identifier, null, supplier);
+            LOGGER.trace("Resource found. Checking for permission {} or role {}.", PERMISSION.ADMINISTRATE, RepoUserRole.ADMINISTRATOR);
+            if (DataResourceUtils.hasPermission(resource, PERMISSION.ADMINISTRATE) || 
+                    AuthenticationHelper.hasAuthority(RepoUserRole.ADMINISTRATOR.getValue())) {
+                LOGGER.trace("Permissions found. Continuing with RESTORE operation.");
+                ControllerUtils.checkEtag(eTag, resource);
+                if (!DataResource.State.GONE.equals(resource.getState()) ||
+                        AuthenticationHelper.hasAuthority(RepoUserRole.ADMINISTRATOR.getValue()) || 
+                        AuthenticationHelper.isPrincipal("SELF")) {
+                    //call delete if resource not revoked (to revoke it) or if it is revoked and role is administrator or caller is repository itself (to set state to GONE)
+                    applicationProperties.getDataResourceService().restore(resource);
                 }
             } else {
                 String message = "Insufficient permissions. ADMINISTRATE permission or ROLE_ADMINISTRATOR required.";
