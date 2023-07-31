@@ -271,6 +271,8 @@ public interface IDataResourceService extends IGenericService<DataResource>, ISe
    * You need to be an ADMINISTRATOR to restore a data resource which is already 'GONE' 
    *
    * @param entity The dataresource to restore.
+   * 
+   *  @return Restored data resource.
    */
-  void restore(final DataResource entity);
+  DataResource restore(final DataResource entity);
 }

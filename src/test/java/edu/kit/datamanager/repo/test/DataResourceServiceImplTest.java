@@ -98,7 +98,7 @@ public class DataResourceServiceImplTest {
       }
 
       @Override
-      public void restore(DataResource c) {
+      public DataResource restore(DataResource c) {
         throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
       }
 

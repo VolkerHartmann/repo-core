@@ -348,12 +348,12 @@ public class DataResourceUtils {
      * @param request
      * @param supplier
      */
-    public static void restoreResource(RepoBaseConfiguration applicationProperties,
+    public static DataResource restoreResource(RepoBaseConfiguration applicationProperties,
             String identifier,
             final WebRequest request,
             Function<String, String> supplier) {
         String etagFromHeader = ControllerUtils.getEtagFromHeader(request);
-        restoreResource(applicationProperties, identifier, etagFromHeader, supplier);
+        return restoreResource(applicationProperties, identifier, etagFromHeader, supplier);
     }
 
     /**
@@ -363,11 +363,14 @@ public class DataResourceUtils {
      * @param identifier
      * @param eTag
      * @param supplier
+     * @return Restored resource.
      */
-    public static void restoreResource(RepoBaseConfiguration applicationProperties,
+    public static DataResource restoreResource(RepoBaseConfiguration applicationProperties,
             String identifier,
             final String eTag,
             Function<String, String> supplier) {
+      DataResource restoredResource = null;
+      
         if (applicationProperties.isReadOnly()) {
             String message = "Repository is in read-only mode. Restore request denied.";
             LOGGER.info(message);
@@ -386,8 +389,8 @@ public class DataResourceUtils {
                 if (!DataResource.State.GONE.equals(resource.getState()) ||
                         AuthenticationHelper.hasAuthority(RepoUserRole.ADMINISTRATOR.getValue()) || 
                         AuthenticationHelper.isPrincipal("SELF")) {
-                    //call delete if resource not revoked (to revoke it) or if it is revoked and role is administrator or caller is repository itself (to set state to GONE)
-                    applicationProperties.getDataResourceService().restore(resource);
+                    //call restore if resource not gone (to make it visible again) or if it is gone and role is administrator or caller is repository itself (to set state to REVOKED)
+                    restoredResource = applicationProperties.getDataResourceService().restore(resource);
                 }
             } else {
                 String message = "Insufficient permissions. ADMINISTRATE permission or ROLE_ADMINISTRATOR required.";
@@ -398,7 +401,7 @@ public class DataResourceUtils {
             //ignored
             LOGGER.info("Resource with identifier {} not found. Returning with HTTP NO_CONTENT.", identifier);
         }
-
+      return restoredResource;
     }
 
     public static String getInternalIdentifier(DataResource resource) {

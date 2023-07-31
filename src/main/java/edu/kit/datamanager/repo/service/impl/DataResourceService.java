@@ -718,15 +718,10 @@ public class DataResourceService implements IDataResourceService {
 
     @Override
     @Transactional(readOnly = false)
-    public void restore(DataResource resource) {
+    public DataResource restore(DataResource resource) {
         logger.trace("Performing restore({}).", "DataResource#" + resource.getId());
 
         DataResource.State newState = DataResource.State.VOLATILE;
-
-        if (DataResource.State.GONE.equals(resource.getState())) {
-            newState = DataResource.State.REVOKED;
-            logger.trace("RESTORE was called on resource. Setting new state to {}.", newState);
-        }
         logger.debug("Setting resource state to {}.", newState);
         resource.setState(newState);
 
@@ -739,6 +734,8 @@ public class DataResourceService implements IDataResourceService {
         //capture state change, not a delete operation as the resource is not physically deleted
         logger.trace("Capturing audit information.");
         applicationProperties.getAuditService().captureAuditInformation(result, AuthenticationHelper.getPrincipal());
+        
+        return result;
     }
 
     protected IDataResourceDao getDao() {
