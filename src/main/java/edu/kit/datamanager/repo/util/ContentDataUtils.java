@@ -15,7 +15,6 @@
  */
 package edu.kit.datamanager.repo.util;
 
-import com.github.fge.jsonpatch.JsonPatch;
 import edu.kit.datamanager.entities.PERMISSION;
 import edu.kit.datamanager.exceptions.BadArgumentException;
 import edu.kit.datamanager.exceptions.CustomInternalServerError;
@@ -24,6 +23,7 @@ import edu.kit.datamanager.repo.configuration.RepoBaseConfiguration;
 import edu.kit.datamanager.repo.domain.ContentInformation;
 import edu.kit.datamanager.repo.domain.DataResource;
 import edu.kit.datamanager.util.ControllerUtils;
+import edu.kit.datamanager.util.json.JsonPatch;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;

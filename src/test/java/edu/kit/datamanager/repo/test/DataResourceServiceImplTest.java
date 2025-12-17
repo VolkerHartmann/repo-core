@@ -15,7 +15,6 @@
  */
 package edu.kit.datamanager.repo.test;
 
-import com.github.fge.jsonpatch.JsonPatch;
 import edu.kit.datamanager.entities.PERMISSION;
 import edu.kit.datamanager.exceptions.BadArgumentException;
 import edu.kit.datamanager.exceptions.PatchApplicationException;
@@ -25,6 +24,7 @@ import edu.kit.datamanager.exceptions.UpdateForbiddenException;
 import edu.kit.datamanager.repo.configuration.RepoBaseConfiguration;
 import edu.kit.datamanager.repo.domain.DataResource;
 import edu.kit.datamanager.repo.service.IDataResourceService;
+import edu.kit.datamanager.util.json.JsonPatch;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;

@@ -15,7 +15,6 @@
  */
 package edu.kit.datamanager.repo.service.impl;
 
-import com.github.fge.jsonpatch.JsonPatch;
 import edu.kit.datamanager.entities.Identifier;
 import edu.kit.datamanager.entities.PERMISSION;
 import edu.kit.datamanager.entities.messaging.DataResourceMessage;
@@ -43,6 +42,7 @@ import edu.kit.datamanager.service.impl.LogfileMessagingService;
 import edu.kit.datamanager.util.AuthenticationHelper;
 import edu.kit.datamanager.util.ControllerUtils;
 import edu.kit.datamanager.util.PatchUtil;
+import edu.kit.datamanager.util.json.JsonPatch;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -581,7 +581,7 @@ public class DataResourceService implements IDataResourceService {
 
         //check if any forbidden field has been updated
         //use PatchUtil as it does exactly this check
-        if (!PatchUtil.canUpdate(resource, newResource, userGrants)) {
+        if (!DataResourceUtils.canUpdate(resource, newResource, userGrants)) {
             String message = "Update not applicable. At least one unmodifiable field has been changed.";
             logger.info(message);
             throw new UpdateForbiddenException(message);

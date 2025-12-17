@@ -15,9 +15,8 @@
  */
 package edu.kit.datamanager.repo.util;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.fge.jsonpatch.JsonPatch;
+import edu.kit.datamanager.annotations.SecureUpdate;
 import edu.kit.datamanager.controller.hateoas.event.PaginatedResultsRetrievedEvent;
 import edu.kit.datamanager.entities.Identifier;
 import edu.kit.datamanager.entities.PERMISSION;
@@ -34,10 +33,15 @@ import edu.kit.datamanager.repo.domain.DataResource;
 import edu.kit.datamanager.repo.domain.acl.AclEntry;
 import edu.kit.datamanager.util.AuthenticationHelper;
 import edu.kit.datamanager.util.ControllerUtils;
+import edu.kit.datamanager.util.json.JsonPatch;
+import edu.kit.datamanager.util.json.JsonPatchUtil;
+import edu.kit.datamanager.util.json.exceptions.JsonPatchProcessingException;
 import java.io.UnsupportedEncodingException;
+import java.lang.reflect.Field;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -648,10 +652,10 @@ public class DataResourceUtils {
   public static DataResource copyDataResource(DataResource dataresource) {
     DataResource returnValue;
     try {
-      String jsonString = mapper.writeValueAsString(dataresource);
+      String jsonString = JsonPatchUtil.jsonObjectToString(dataresource);
       LOGGER.trace("dataresource: {}", jsonString);
-      returnValue = mapper.readValue(jsonString, DataResource.class);
-    } catch (JsonProcessingException ex) {
+      returnValue = JsonPatchUtil.jsonStringToObject(jsonString, DataResource.class);
+    } catch (JsonPatchProcessingException ex) {
       LOGGER.error("Error mapping dataresource!");
       returnValue = dataresource;
     }
@@ -667,13 +671,76 @@ public class DataResourceUtils {
   public static edu.kit.datamanager.entities.repo.DataResource migrateToDataResource(DataResource dataresource) {
     edu.kit.datamanager.entities.repo.DataResource returnValue = null;
     try {
-      String jsonString = mapper.writeValueAsString(dataresource);
+      String jsonString =JsonPatchUtil.jsonObjectToString(dataresource);
       LOGGER.trace("dataresource: {}", jsonString);
-      returnValue = mapper.readValue(jsonString, edu.kit.datamanager.entities.repo.DataResource.class);
-    } catch (JsonProcessingException ex) {
+      returnValue = JsonPatchUtil.jsonStringToObject(jsonString, edu.kit.datamanager.entities.repo.DataResource.class);
+    } catch (JsonPatchProcessingException ex) {
       LOGGER.error("Error mapping dataresource!");
     }
     return returnValue;
+  }
+  /**
+   * Check if the patched object can be updated by the provided authorities.
+   *
+   * @param originalObj Original object from database.
+   * @param patched Patched object.
+   * @param authorities Authorities of the caller.
+   * @return TRUE if update is allowed, FALSE otherwise.
+   */
+  public static boolean canUpdate(Object originalObj, Object patched, Collection<? extends GrantedAuthority> authorities) {
+    for (Field field : patched.getClass().getDeclaredFields()) {
+      SecureUpdate secureUpdate = field.getAnnotation(SecureUpdate.class);
+      if (secureUpdate != null) {
+        try {
+          field.setAccessible(true);
+          Object persistedField = field.get(patched);
+          Object originalField = field.get(originalObj);
+          String[] allowedRoles = secureUpdate.value();
+
+          if (!Objects.equals(persistedField, originalField)) {
+            boolean canUpdate = false;
+            for (String role : allowedRoles) {//go though all roles allowed to update
+              for (GrantedAuthority authority : authorities) {//check owned authorities
+
+                String auth = authority.getAuthority();
+                if (auth.toLowerCase().startsWith("role") && role.toLowerCase().startsWith("role")) {//compare two roles
+                  if (authority.getAuthority().equalsIgnoreCase(role)) {//just use string comparison as the roles can be either user or group roles
+                    canUpdate = true;
+                    break;
+                  }
+                } else if (auth.toLowerCase().startsWith("permission") && role.toLowerCase().startsWith("permission")) {//compare two permissions
+                  PERMISSION userPermission = PERMISSION.fromValue(auth);
+                  PERMISSION permissionAccepted = PERMISSION.fromValue(role);
+                  if (userPermission.atLeast(permissionAccepted)) {
+                    canUpdate = true;
+                    break;
+                  }
+                } else {
+                  if (authority.getAuthority().equalsIgnoreCase(role)) {//comparison of plain strings...for testing
+                    canUpdate = true;
+                    break;
+                  }
+                }
+              }
+              if (canUpdate) {
+                //this field can be updated
+                break;
+              }
+            }
+            if (!canUpdate) {
+              //at least one field cannot be updated
+              LOGGER.warn("Updating of field " + field + " is allowed by " + Arrays.asList(allowedRoles) + ", but caller only offered the following authorities: " + authorities + ".");
+              return false;
+            }
+          }
+        } catch (IllegalAccessException | IllegalArgumentException | SecurityException e) {
+          LOGGER.error("Failed to check update applicability.", e);
+          throw new CustomInternalServerError("Unable to check if update is applicable. Message: " + e.getMessage());
+        }
+      }
+    }
+
+    return true;
   }
 
 }

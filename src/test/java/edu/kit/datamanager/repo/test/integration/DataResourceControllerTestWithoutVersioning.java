@@ -1518,9 +1518,9 @@ public class DataResourceControllerTestWithoutVersioning {
             "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getHeader("ETag");
 
     String patch = "[{\"op\": \"replace\",\"path\": \"/depth\",\"value\": \"132\"}]";
-
+    // Invalid field 'depth' should be ignored and return 204 No Content (in former versions it returned 400 Bad Request)
     this.mockMvc.perform(patch("/api/v1/dataresources/" + sampleResource.getId() + "/data/validFile").header(HttpHeaders.AUTHORIZATION,
-            "Bearer " + userToken).header("If-Match", etag).contentType("application/json-patch+json").content(patch)).andDo(print()).andExpect(status().isForbidden());
+            "Bearer " + userToken).header("If-Match", etag).contentType("application/json-patch+json").content(patch)).andDo(print()).andExpect(status().isNoContent());
   }
 
   @Test

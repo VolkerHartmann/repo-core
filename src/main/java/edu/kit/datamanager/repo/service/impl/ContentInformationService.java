@@ -15,7 +15,6 @@
  */
 package edu.kit.datamanager.repo.service.impl;
 
-import com.github.fge.jsonpatch.JsonPatch;
 import edu.kit.datamanager.entities.ContentElement;
 import edu.kit.datamanager.entities.PERMISSION;
 import edu.kit.datamanager.entities.RepoUserRole;
@@ -45,6 +44,7 @@ import edu.kit.datamanager.service.impl.LogfileMessagingService;
 import edu.kit.datamanager.util.AuthenticationHelper;
 import edu.kit.datamanager.util.ControllerUtils;
 import edu.kit.datamanager.util.PatchUtil;
+import edu.kit.datamanager.util.json.JsonPatch;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URL;

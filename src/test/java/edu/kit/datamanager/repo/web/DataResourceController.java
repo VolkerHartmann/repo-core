@@ -15,7 +15,6 @@
  */
 package edu.kit.datamanager.repo.web;
 
-import com.github.fge.jsonpatch.JsonPatch;
 import edu.kit.datamanager.entities.PERMISSION;
 import edu.kit.datamanager.entities.RepoUserRole;
 import edu.kit.datamanager.exceptions.BadArgumentException;
@@ -38,6 +37,7 @@ import edu.kit.datamanager.repo.util.DataResourceUtils;
 import edu.kit.datamanager.service.IAuditService;
 import edu.kit.datamanager.util.AuthenticationHelper;
 import edu.kit.datamanager.util.ControllerUtils;
+import edu.kit.datamanager.util.json.JsonPatch;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
