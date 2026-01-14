@@ -213,8 +213,8 @@ public class DataResource implements EtagSupport, Serializable {
     private Set<FundingReference> fundingReferences = new HashSet<>();
 
     //internal properties
-    @Schema(description = "Date at which the last update occured.", example = "2017-05-10T10:41:00Z", requiredMode = Schema.RequiredMode.REQUIRED)
-    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss'Z'", timezone = "UTC")
+    @Schema(description = "Date at which the last update occured.", example = "2017-05-10T10:41:00.500Z", requiredMode = Schema.RequiredMode.REQUIRED)
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", timezone = "UTC")
     @JsonDeserialize(using = CustomInstantDeserializer.class)
     @JsonSerialize(using = CustomInstantSerializer.class)
     @Field(type = FieldType.Date, format = DateFormat.date_optional_time)
