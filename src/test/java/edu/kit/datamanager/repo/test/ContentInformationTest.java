@@ -17,10 +17,11 @@ package edu.kit.datamanager.repo.test;
 
 import edu.kit.datamanager.repo.domain.ContentInformation;
 import edu.kit.datamanager.repo.domain.DataResource;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+
+import java.util.*;
+
+import edu.kit.datamanager.util.json.JsonPatch;
+import edu.kit.datamanager.util.json.JsonPatchUtil;
 import org.junit.Assert;
 import org.junit.Test;
 import org.springframework.http.MediaType;
@@ -52,7 +53,7 @@ public class ContentInformationTest{
     Assert.assertEquals("md5:134abcd234fgh", info.getHash());
     Assert.assertEquals("text/plain", info.getMediaType());
     Assert.assertEquals(MediaType.TEXT_PLAIN, info.getMediaTypeAsObject());
-    Assert.assertNotNull(info.getMetadata().size());
+    Assert.assertNotNull(info.getMetadata());
     Assert.assertEquals(1, info.getMetadata().size());
     Assert.assertEquals("a file", info.getMetadata().get("type"));
     Assert.assertNotNull(info.getParentResource());
@@ -218,47 +219,78 @@ public class ContentInformationTest{
     info2.setRelativePath("data/myfile.txt");
 
     //check basic equals
-    Assert.assertTrue(info1.equals(info2));
-    Assert.assertFalse(info1.equals(null));
-    Assert.assertFalse(info1.equals("A String"));
+    Assert.assertEquals(info1, info2);
+    Assert.assertNotNull(info1);
+    Assert.assertNotEquals("A String", info1);
     Assert.assertEquals(info1.hashCode(), info2.hashCode());
 
     //check with different content URI
     info1.setContentUri(info2.getContentUri() + "2");
-    Assert.assertFalse(info1.equals(info2));
+    Assert.assertNotEquals(info1, info2);
     Assert.assertNotEquals(info1.hashCode(), info2.hashCode());
     info1.setContentUri(info2.getContentUri());
 
     //check with different hash
     info1.setHash(info2.getHash() + "2");
-    Assert.assertFalse(info1.equals(info2));
+    Assert.assertNotEquals(info1, info2);
     Assert.assertNotEquals(info1.hashCode(), info2.hashCode());
     info1.setHash(info2.getHash());
 
     //check with diferent media type
     info1.setMediaType(MediaType.APPLICATION_ATOM_XML_VALUE.toString());
-    Assert.assertFalse(info1.equals(info2));
+    Assert.assertNotEquals(info1, info2);
     Assert.assertNotEquals(info1.hashCode(), info2.hashCode());
     info1.setMediaType(info2.getMediaType());
 
     //check with different relative path
     info1.setRelativePath("test/other.txt");
-    Assert.assertFalse(info1.equals(info2));
+    Assert.assertNotEquals(info1, info2);
     Assert.assertNotEquals(info1.hashCode(), info2.hashCode());
     info1.setRelativePath(info2.getRelativePath());
     //check with different metadata
     info1.getMetadata().put("second", "value");
-    Assert.assertFalse(info1.equals(info2));
+    Assert.assertNotEquals(info1, info2);
     Assert.assertNotEquals(info1.hashCode(), info2.hashCode());
     //clear metadata to be equal again
     info1.getMetadata().clear();
     info2.getMetadata().clear();
-    Assert.assertTrue(info1.equals(info2));
+    Assert.assertEquals(info1, info2);
     Assert.assertEquals(info1.hashCode(), info2.hashCode());
 
     //check with different tags
     info1.getTags().add("another");
-    Assert.assertFalse(info1.equals(info2));
+    Assert.assertNotEquals(info1, info2);
     Assert.assertNotEquals(info1.hashCode(), info2.hashCode());
+  }
+
+  @Test
+  public void testSerializationAndDeserialization(){
+    DataResource parentResource = DataResource.factoryNewDataResource();
+    ContentInformation info1 = new ContentInformation();
+    info1.setContentUri("file:///tmp/data/myfile.txt");
+    info1.setHash("md5:134abcd234fgh");
+    info1.setMediaType("text/plain");
+    Map<String, String> metadata = new HashMap<>();
+    metadata.put("type", "a file");
+    info1.setMetadata(metadata);
+    info1.setParentResource(parentResource);
+    Set<String> tags = new HashSet<>();
+    tags.add("file");
+    tags.add("important");
+    info1.setTags(tags);
+    info1.setRelativePath("data/myfile.txt");
+
+    try{
+      String serialized = JsonPatchUtil.jsonObjectToString(info1);
+      ContentInformation info2 = JsonPatchUtil.jsonStringToObject(serialized, ContentInformation.class);
+      Assert.assertEquals(info1, info2);
+      //now test patching
+      JsonPatch.Operation op = new JsonPatch.Operation(JsonPatch.OperationType.REPLACE, "/relativePath", null, "1/2/3/myfile.txt");
+      JsonPatch patch = new JsonPatch(Arrays.asList(op));
+      ContentInformation info3 = JsonPatchUtil.applyPatch(info2, JsonPatchUtil.jsonObjectToString(patch), ContentInformation.class);
+       Assert.assertEquals(4, info3.getDepth());
+    } catch(Exception ex){
+      Assert.fail("Exception during serialization/deserialization: " + ex.getMessage());
+    }
   }
 }

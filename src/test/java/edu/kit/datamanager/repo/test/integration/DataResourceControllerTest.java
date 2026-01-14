@@ -16,7 +16,6 @@
 package edu.kit.datamanager.repo.test.integration;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -62,6 +61,8 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+
+import edu.kit.datamanager.util.json.JsonPatchUtil;
 import org.apache.commons.io.FileUtils;
 import org.hamcrest.Matchers;
 import static org.hamcrest.Matchers.equalTo;
@@ -98,6 +99,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
+
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -152,7 +154,7 @@ public class DataResourceControllerTest {
     private static Set<Path> allTempFiles = new HashSet<>();
 
     @Before
-    public void setUp() throws JsonProcessingException {
+    public void setUp() {
         contentInformationAuditService = repositoryConfig.getContentInformationAuditService();
         contentInformationDao.deleteAll();
         dataResourceDao.deleteAll();
@@ -1314,7 +1316,7 @@ public class DataResourceControllerTest {
         this.mockMvc.perform(multipart("/api/v1/dataresources/" + sampleResource.getId() + "/data/bibtex3.txt").file(fstmp).file(secmp).header(HttpHeaders.AUTHORIZATION,
                 "Bearer " + userToken)).andDo(print()).andExpect(status().isCreated());
 
-        MvcResult res = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/").header(HttpHeaders.AUTHORIZATION,
+        this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/").header(HttpHeaders.AUTHORIZATION,
                 "Bearer " + userToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andReturn();
 
         //ContentInformation result = mapper.
@@ -1544,10 +1546,10 @@ public class DataResourceControllerTest {
     }
 
     @Test
-    public void testPatchInvalidContentInformationField() throws Exception {
+    public void testPatchForbiddenContentInformationFieldParentResource() throws Exception {
         ContentInformation cinfo = new ContentInformation();
         cinfo.setParentResource(sampleResource);
-        cinfo.setRelativePath("validFile");
+        cinfo.setRelativePath("/file.txt");
         cinfo.setVersioningService("none");
         Set<String> tags = new HashSet<>();
         tags.add("testing");
@@ -1556,13 +1558,376 @@ public class DataResourceControllerTest {
         cinfo.setContentUri(temp.toUri().toString());
         contentInformationDao.save(cinfo);
 
-        String etag = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/validFile").header(HttpHeaders.AUTHORIZATION,
+        String etag = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
                 "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getHeader("ETag");
 
-        String patch = "[{\"op\": \"replace\",\"path\": \"/depth\",\"value\": \"132\"}]";
+        String patch = "[{\"op\": \"replace\",\"path\": \"/parentResource/publisher\",\"value\": \"you\"}]";
 
-        this.mockMvc.perform(patch("/api/v1/dataresources/" + sampleResource.getId() + "/data/validFile").header(HttpHeaders.AUTHORIZATION,
+        this.mockMvc.perform(patch("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
                 "Bearer " + userToken).header("If-Match", etag).contentType("application/json-patch+json").content(patch)).andDo(print()).andExpect(status().isForbidden());
+    }
+
+    @Test
+    public void testPatchAdminOnlyContentInformationFieldRelativePath() throws Exception {
+        ContentInformation cinfo = new ContentInformation();
+        cinfo.setParentResource(sampleResource);
+        cinfo.setRelativePath("/file.txt");
+        cinfo.setVersioningService("none");
+        Set<String> tags = new HashSet<>();
+        tags.add("testing");
+        cinfo.setTags(tags);
+        Path temp = createTempFile();
+        cinfo.setContentUri(temp.toUri().toString());
+        contentInformationDao.save(cinfo);
+
+        String etag = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getHeader("ETag");
+
+        String patch = "[{\"op\": \"replace\",\"path\": \"/relativePath\",\"value\": \"/otherFilename.txt\"}]";
+
+        this.mockMvc.perform(patch("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + userToken).header("If-Match", etag).contentType("application/json-patch+json").content(patch)).andDo(print()).andExpect(status().isForbidden());
+
+        // not even admin is allowed to change depth of the path
+        String patchWithPath = "[{\"op\": \"replace\",\"path\": \"/relativePath\",\"value\": \"/a/b/otherFilename.txt\"}]";
+        this.mockMvc.perform(patch("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header("If-Match", etag).contentType("application/json-patch+json").content(patchWithPath)).andDo(print()).andExpect(status().isForbidden());
+        // but if the depth is the same it is allowed
+        this.mockMvc.perform(patch("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header("If-Match", etag).contentType("application/json-patch+json").content(patch)).andDo(print()).andExpect(status().isNoContent());
+        // try to fetch with old path
+        this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isNotFound());
+        // fetch with new path
+        String result = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/otherFilename.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        Assert.assertTrue(result.contains("\"relativePath\":\"otherFilename.txt\""));
+    }
+
+    @Test
+    public void testPatchForbiddenContentInformationFieldVersion() throws Exception {
+        ContentInformation cinfo = new ContentInformation();
+        cinfo.setParentResource(sampleResource);
+        cinfo.setVersion(1);
+        cinfo.setRelativePath("/file.txt");
+        cinfo.setVersioningService("none");
+        Set<String> tags = new HashSet<>();
+        tags.add("testing");
+        cinfo.setTags(tags);
+        Path temp = createTempFile();
+        cinfo.setContentUri(temp.toUri().toString());
+        contentInformationDao.save(cinfo);
+
+        String etag = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getHeader("ETag");
+
+        String patch = "[{\"op\": \"replace\",\"path\": \"/version\",\"value\": 5}]";
+
+        this.mockMvc.perform(patch("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + userToken).header("If-Match", etag).contentType("application/json-patch+json").content(patch)).andDo(print()).andExpect(status().isForbidden());
+        // verify version is unchanged
+        String result = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        Assert.assertTrue(result.contains("\"version\":1"));
+    }
+
+    @Test
+    public void testPatchForbiddenContentInformationFieldFileVersion() throws Exception {
+        ContentInformation cinfo = new ContentInformation();
+        cinfo.setParentResource(sampleResource);
+        cinfo.setVersion(1);
+        cinfo.setFileVersion("1.0.0");
+        cinfo.setRelativePath("/file.txt");
+        cinfo.setVersioningService("none");
+        Set<String> tags = new HashSet<>();
+        tags.add("testing");
+        cinfo.setTags(tags);
+        Path temp = createTempFile();
+        cinfo.setContentUri(temp.toUri().toString());
+        contentInformationDao.save(cinfo);
+
+        String etag = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getHeader("ETag");
+
+        String patch = "[{\"op\": \"replace\",\"path\": \"/fileVersion\",\"value\": \"1.0.1\"}]";
+
+        this.mockMvc.perform(patch("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + userToken).header("If-Match", etag).contentType("application/json-patch+json").content(patch)).andDo(print()).andExpect(status().isForbidden());
+        // verify fileVersion is unchanged
+        String result = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        Assert.assertTrue(result.contains("\"fileVersion\":\"1.0.0\""));
+    }
+
+    @Test
+    public void testPatchForbiddenContentInformationFieldVersioningService() throws Exception {
+        ContentInformation cinfo = new ContentInformation();
+        cinfo.setParentResource(sampleResource);
+        cinfo.setVersion(1);
+        cinfo.setFileVersion("1.0.0");
+        cinfo.setRelativePath("/file.txt");
+        cinfo.setVersioningService("none");
+        Set<String> tags = new HashSet<>();
+        tags.add("testing");
+        cinfo.setTags(tags);
+        Path temp = createTempFile();
+        cinfo.setContentUri(temp.toUri().toString());
+        contentInformationDao.save(cinfo);
+
+        String etag = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getHeader("ETag");
+
+        String patch = "[{\"op\": \"replace\",\"path\": \"/versioningService\",\"value\": \"smartVersioning\"}]";
+
+        this.mockMvc.perform(patch("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + userToken).header("If-Match", etag).contentType("application/json-patch+json").content(patch)).andDo(print()).andExpect(status().isForbidden());
+        // verify fileVersion is unchanged
+        String result = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        Assert.assertTrue(result.contains("\"versioningService\":\"none\""));
+    }
+
+    @Test
+    public void testPatchAdminOnlyContentInformationFieldContentUri() throws Exception {
+        ContentInformation cinfo = new ContentInformation();
+        cinfo.setParentResource(sampleResource);
+        cinfo.setVersion(1);
+        cinfo.setFileVersion("1.0.0");
+        cinfo.setRelativePath("/file.txt");
+        cinfo.setVersioningService("none");
+        Set<String> tags = new HashSet<>();
+        tags.add("testing");
+        cinfo.setTags(tags);
+        Path temp = createTempFile();
+        cinfo.setContentUri(temp.toUri().toString());
+        contentInformationDao.save(cinfo);
+
+        String etag = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getHeader("ETag");
+
+        String patch = "[{\"op\": \"replace\",\"path\": \"/contentUri\",\"value\": \"/new/dir/to/file.txt\"}]";
+
+        this.mockMvc.perform(patch("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + userToken).header("If-Match", etag).contentType("application/json-patch+json").content(patch)).andDo(print()).andExpect(status().isForbidden());
+        // verify contentUri is unchanged
+        String result = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        Assert.assertTrue(result.contains("\"contentUri\":\""+ temp.toUri().toString() +"\""));
+        //but admin can do it
+        this.mockMvc.perform(patch("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header("If-Match", etag).contentType("application/json-patch+json").content(patch)).andDo(print()).andExpect(status().isNoContent());
+        // check for changed value
+        result = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        Assert.assertTrue(result.contains("\"contentUri\":\"/new/dir/to/file.txt\""));
+    }
+
+    @Test
+    public void testPatchAdminOnlyContentInformationFieldUploader() throws Exception {
+        ContentInformation cinfo = new ContentInformation();
+        cinfo.setParentResource(sampleResource);
+        cinfo.setVersion(1);
+        cinfo.setFileVersion("1.0.0");
+        cinfo.setRelativePath("/file.txt");
+        cinfo.setVersioningService("none");
+        cinfo.setUploader("me");
+        Set<String> tags = new HashSet<>();
+        tags.add("testing");
+        cinfo.setTags(tags);
+        Path temp = createTempFile();
+        cinfo.setContentUri(temp.toUri().toString());
+        contentInformationDao.save(cinfo);
+
+        String etag = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getHeader("ETag");
+
+        String patch = "[{\"op\": \"replace\",\"path\": \"/uploader\",\"value\": \"you\"}]";
+
+        this.mockMvc.perform(patch("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + userToken).header("If-Match", etag).contentType("application/json-patch+json").content(patch)).andDo(print()).andExpect(status().isForbidden());
+        // verify uploader is unchanged
+        String result = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        Assert.assertTrue(result.contains("\"uploader\":\"me\""));
+        //but admin can do it
+        this.mockMvc.perform(patch("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header("If-Match", etag).contentType("application/json-patch+json").content(patch)).andDo(print()).andExpect(status().isNoContent());
+        // check for changed value
+        result = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        Assert.assertTrue(result.contains("\"uploader\":\"you\""));
+    }
+
+    @Test
+    public void testPatchAdminOnlyContentInformationFieldMediaType() throws Exception {
+        ContentInformation cinfo = new ContentInformation();
+        cinfo.setParentResource(sampleResource);
+        cinfo.setVersion(1);
+        cinfo.setFileVersion("1.0.0");
+        cinfo.setRelativePath("/file.txt");
+        cinfo.setVersioningService("none");
+        cinfo.setMediaType("text/plain");
+        Set<String> tags = new HashSet<>();
+        tags.add("testing");
+        cinfo.setTags(tags);
+        Path temp = createTempFile();
+        cinfo.setContentUri(temp.toUri().toString());
+        contentInformationDao.save(cinfo);
+
+        String etag = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getHeader("ETag");
+
+        String patch = "[{\"op\": \"replace\",\"path\": \"/mediaType\",\"value\": \"text/html\"}]";
+
+        this.mockMvc.perform(patch("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + userToken).header("If-Match", etag).contentType("application/json-patch+json").content(patch)).andDo(print()).andExpect(status().isForbidden());
+        // verify mediaType is unchanged
+        String result = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        Assert.assertTrue(result.contains("\"mediaType\":\"text/plain\""));
+        //but admin can do it
+        this.mockMvc.perform(patch("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header("If-Match", etag).contentType("application/json-patch+json").content(patch)).andDo(print()).andExpect(status().isNoContent());
+        // check for changed value
+        result = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        Assert.assertTrue(result.contains("\"mediaType\":\"text/html\""));
+    }
+
+    @Test
+    public void testPatchAdminOnlyContentInformationFieldHash() throws Exception {
+        ContentInformation cinfo = new ContentInformation();
+        cinfo.setParentResource(sampleResource);
+        cinfo.setVersion(1);
+        cinfo.setFileVersion("1.0.0");
+        cinfo.setRelativePath("/file.txt");
+        cinfo.setVersioningService("none");
+        cinfo.setHash("12345");
+        Set<String> tags = new HashSet<>();
+        tags.add("testing");
+        cinfo.setTags(tags);
+        Path temp = createTempFile();
+        cinfo.setContentUri(temp.toUri().toString());
+        contentInformationDao.save(cinfo);
+
+        String etag = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getHeader("ETag");
+
+        String patch = "[{\"op\": \"replace\",\"path\": \"/hash\",\"value\": \"123456789ABCDEF\"}]";
+
+        this.mockMvc.perform(patch("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + userToken).header("If-Match", etag).contentType("application/json-patch+json").content(patch)).andDo(print()).andExpect(status().isForbidden());
+        // verify hash is unchanged
+        String result = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        Assert.assertTrue(result.contains("\"hash\":\"12345\""));
+        //but admin can do it
+        this.mockMvc.perform(patch("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header("If-Match", etag).contentType("application/json-patch+json").content(patch)).andDo(print()).andExpect(status().isNoContent());
+        // check for changed value
+        result = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        Assert.assertTrue(result.contains("\"hash\":\"123456789ABCDEF\""));
+    }
+
+    @Test
+    public void testPatchAdminOnlyContentInformationFieldSize() throws Exception {
+        ContentInformation cinfo = new ContentInformation();
+        cinfo.setParentResource(sampleResource);
+        cinfo.setVersion(1);
+        cinfo.setFileVersion("1.0.0");
+        cinfo.setRelativePath("/file.txt");
+        cinfo.setVersioningService("none");
+        cinfo.setSize(12345L);
+        Set<String> tags = new HashSet<>();
+        tags.add("testing");
+        cinfo.setTags(tags);
+        Path temp = createTempFile();
+        cinfo.setContentUri(temp.toUri().toString());
+        contentInformationDao.save(cinfo);
+
+        String etag = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getHeader("ETag");
+
+        String patch = "[{\"op\": \"replace\",\"path\": \"/size\",\"value\": 12350}]";
+
+        this.mockMvc.perform(patch("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + userToken).header("If-Match", etag).contentType("application/json-patch+json").content(patch)).andDo(print()).andExpect(status().isForbidden());
+        // verify size is unchanged
+        String result = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        Assert.assertTrue(result.contains("\"size\":12345"));
+        //but admin can do it
+        this.mockMvc.perform(patch("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header("If-Match", etag).contentType("application/json-patch+json").content(patch)).andDo(print()).andExpect(status().isNoContent());
+        // check for changed value
+        result = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        Assert.assertTrue(result.contains("\"size\":12350"));
+    }
+
+    @Test
+    public void testPatchPermissionWriteContentInformationObjectMap() throws Exception {
+        ContentInformation cinfo = new ContentInformation();
+        cinfo.setParentResource(sampleResource);
+        cinfo.setVersion(1);
+        cinfo.setFileVersion("1.0.0");
+        cinfo.setRelativePath("/file.txt");
+        cinfo.setVersioningService("none");
+        cinfo.setSize(12345L);
+        Set<String> tags = new HashSet<>();
+        tags.add("testing");
+        cinfo.setTags(tags);
+        Path temp = createTempFile();
+        cinfo.setContentUri(temp.toUri().toString());
+        contentInformationDao.save(cinfo);
+
+        String etag = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getHeader("ETag");
+
+        String patch = "[{\"op\": \"add\",\"path\": \"/metadata\",\"value\": { \"additionalMetadata\" : \"value\"}}]";
+
+        this.mockMvc.perform(patch("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + userToken).header("If-Match", etag).contentType("application/json-patch+json").content(patch)).andDo(print()).andExpect(status().isNoContent());
+        // verify map contains new value
+        String result = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        Assert.assertTrue(result.contains("\"metadata\":{\"additionalMetadata\":\"value\"}"));
+    }
+
+    @Test
+    public void testPatchPermissionWriteContentInformationArrayTag() throws Exception {
+        ContentInformation cinfo = new ContentInformation();
+        cinfo.setParentResource(sampleResource);
+        cinfo.setVersion(1);
+        cinfo.setFileVersion("1.0.0");
+        cinfo.setRelativePath("/file.txt");
+        cinfo.setVersioningService("none");
+        cinfo.setSize(12345L);
+        Set<String> tags = new HashSet<>();
+        tags.add("testing");
+        cinfo.setTags(tags);
+        Path temp = createTempFile();
+        cinfo.setContentUri(temp.toUri().toString());
+        contentInformationDao.save(cinfo);
+
+        String etag = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getHeader("ETag");
+
+        String patch = "[{\"op\": \"replace\",\"path\": \"/tags\",\"value\": [\"three\",\"new\",\"tags\"]}]";
+
+        this.mockMvc.perform(patch("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + userToken).header("If-Match", etag).contentType("application/json-patch+json").content(patch)).andDo(print()).andExpect(status().isNoContent());
+        // verify tags contain new values
+        String result = this.mockMvc.perform(get("/api/v1/dataresources/" + sampleResource.getId() + "/data/file.txt").header(HttpHeaders.AUTHORIZATION,
+                "Bearer " + adminToken).header(HttpHeaders.ACCEPT, "application/vnd.datamanager.content-information+json")).andDo(print()).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        ContentInformation cinfo2 = JsonPatchUtil.jsonStringToObject(result, ContentInformation.class);
+        Set<String> newTags = new HashSet<>();
+        newTags.add("three");
+        newTags.add("new");
+        newTags.add("tags");
+        Assert.assertEquals(3, cinfo2.getTags().size());
+        Assert.assertTrue(cinfo2.getTags().containsAll(newTags));
     }
 
     @Test

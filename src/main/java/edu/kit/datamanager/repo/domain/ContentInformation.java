@@ -41,6 +41,7 @@ import jakarta.persistence.UniqueConstraint;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NonNull;
+import lombok.Setter;
 import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
 
@@ -71,7 +72,7 @@ public class ContentInformation implements EtagSupport, Serializable {
     @Schema(description = "The dataResource this element is associated with.")
     private DataResource parentResource;
     @SecureUpdate({"ROLE_ADMINISTRATOR"})//only allow modification by 'real' administrator, not for owner (having ADMINISTRATE permissions)
-    @Schema(description = "The relative path of this element under which the file content is accessible. The path is relative the the resource's 'data' url, e.g. http://hostname:port/api/v1/dataresources/resourceId/data/relativePath")
+    @Schema(description = "The relative path of this element under which the file content is accessible. The path is relative to the resource's 'data' url, e.g. http://hostname:port/api/v1/dataresources/resourceId/data/relativePath")
     private String relativePath;
     @SecureUpdate({"FORBIDDEN"})
     @Schema(description = "The version of the metadata of this element. The metadata version may differ from the fileVersion.")
@@ -84,6 +85,7 @@ public class ContentInformation implements EtagSupport, Serializable {
     private String versioningService;
     @SecureUpdate({"FORBIDDEN"})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
+    @Setter(lombok.AccessLevel.NONE)  // no setter for depth (it is computed from relativePath)
     private int depth;
     @SecureUpdate({"ROLE_ADMINISTRATOR"})//only allow modification by 'real' administrator, not for owner (having ADMINISTRATE permissions)
     @Schema(description = "The URI where the content is located, e.g. pointing to the remote resource or a local file.")
