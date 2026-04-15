@@ -136,7 +136,7 @@ public class ContentInformationService implements IContentInformationService {
         options.put("force", Boolean.toString(force));
 
         ContentInformation contentInfo;
-        String newFileVersion = "1";
+        String newFileVersion = resource.getVersion();
         if (existingContentInformation.isPresent()) {
             contentInfo = existingContentInformation.get();
             options.put("contentUri", contentInfo.getContentUri());
